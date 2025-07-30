@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment variables
+.env
+.env.*
+
+# Kafka logs (if using Kafka)
+kafka-logs/
+
+# Build output
+dist/
+build/
+
+# Editor & OS-specific files
+.vscode/
+.idea/
+.DS_Store
