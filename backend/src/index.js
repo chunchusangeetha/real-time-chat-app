@@ -4,8 +4,11 @@ import http from 'http';
 import { Server } from "socket.io";
 import cors from 'cors';
 import mongoose from 'mongoose';
-import tokenRoute from './routes/authRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import userRoutes from "./routes/userRoutes.js";
 import socketHandler from './socket.js';
+//import connectDB from './config/db.js';
 
 dotenv.config();
 mongoose
@@ -21,6 +24,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+//connectDB();
 
 const server = http.createServer(app);
 
@@ -33,9 +37,9 @@ const io = new Server(server, {
 });
 
 socketHandler(io);
-
-app.post('/api/auth/verify-token', tokenRoute);
-
+app.use("/api/auth", authRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api", userRoutes);
 
 const PORT = process.env.PORT || 5003;
 server.listen(PORT, () => {

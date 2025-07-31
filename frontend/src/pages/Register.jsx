@@ -13,7 +13,7 @@ const Register = () => {
     e.preventDefault();
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      navigate("/chat"); // Redirect to chat or dashboard on success
+      navigate("/chat"); 
     } catch (error) {
       if (error.code === "auth/email-already-in-use") {
         setErrorMsg("Email already in use. Do you want to log in instead?");

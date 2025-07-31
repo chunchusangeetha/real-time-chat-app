@@ -9,32 +9,32 @@ const Login = () => {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
 
-      const handleLogin = async (e) => {
+      // const handleLogin = async (e) => {
+      //   e.preventDefault();
+      //   try {
+      //     await signInWithEmailAndPassword(auth, email, password);
+      //     navigate("/chat"); 
+      //   } catch (err) {
+      //     setError(err.message);
+      //   }
+      // };
+    const handleLogin = async (e) => {
         e.preventDefault();
         try {
-          await signInWithEmailAndPassword(auth, email, password);
-          navigate("/chat"); 
-        } catch (err) {
-          setError(err.message);
-        }
-      };
-    // const handleLogin = async (e) => {
-    //     e.preventDefault();
-    //     try {
-    //         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    //         const user = userCredential.user;
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
 
-    //         const token = await user.getIdToken();
+            const token = await user.getIdToken();
        
-    //         const res = await axios.post("http://127.0.0.1:5003/api/auth/verify-token", { token })
+            const res = await axios.post("http://127.0.0.1:5003/api/auth/verify-token", { token })
 
 
-    //         console.log("Backend verified user:", res.data);
-    //         navigate("/chat");
-    //     } catch (err) {
-    //         setError(err.message);
-    //     }
-    // };
+            console.log("Backend verified user:", res.data);
+            navigate("/chat");
+        } catch (err) {
+            setError(err.message);
+        }
+    };
     return (
         <form onSubmit={handleLogin}>
             <h2>Login</h2>
