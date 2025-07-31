@@ -1,14 +1,7 @@
-// src/kafka/producer.js
 import { Kafka } from "kafkajs";
 
-const kafka = new Kafka({ clientId: "chat-app", brokers: ["localhost:9092"] });
-const producer = kafka.producer();
+const kafka = new Kafka({ clientId: "chat-app",  brokers: ["localhost:9092"],
+});
 
-await producer.connect();
-
-export const sendMessageToKafka = async (messageData) => {
-  await producer.send({
-    topic: "chat-messages",
-    messages: [{ value: JSON.stringify(messageData) }],
-  });
-};
+export const kafkaProducer = kafka.producer();
+await kafkaProducer.connect();
