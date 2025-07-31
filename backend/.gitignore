@@ -21,3 +21,5 @@ build/
 .vscode/
 .idea/
 .DS_Store
+
+backend/src/config/serviceAccountKey.json
