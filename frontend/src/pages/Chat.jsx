@@ -9,7 +9,7 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
 
-  const backendURL = "http://localhost:5003/api"; 
+  const backendURL = `${import.meta.env.VITE_API_BASE_URL}/api`; 
 
   useEffect(() => {
     const fetchUsers = async () => {
