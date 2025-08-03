@@ -1,68 +1,74 @@
-import dotenv from 'dotenv';
-import express from 'express';
-import http from 'http';
+import dotenv from "dotenv";
+import express from "express";
+import http from "http";
 import { Server } from "socket.io";
-import cors from 'cors';
-import mongoose from 'mongoose';
-import authRoutes from './routes/authRoutes.js';
-import chatRoutes from './routes/chatRoutes.js';
+import cors from "cors";
+import connectDB from "./config/db.js";
+import authRoutes from "./routes/authRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
-import socketHandler from './socket.js';
+import socketHandler from "./sockets/socket.js";
+import { connectKafkaProducer } from "./kafka/producer.js";
+import { startConsumer } from "./kafka/consumer.js";
 
 dotenv.config();
 
-// Debug logs
-console.log("Using MONGO_URI:", process.env.MONGO_URI);
-console.log("Frontend URI for CORS:", process.env.FRONTEND_URI);
+const startServer = async () => {
+  const app = express();
 
-// Connect to MongoDB
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB error:", err));
+  try {
+   await connectDB();
+    console.log("MongoDB connected");
+  } catch (err) {
+    console.error("MongoDB error:", err);
+    process.exit(1);
+  }
 
-const app = express();
+  // CORS
+  const allowedOrigin = process.env.FRONTEND_URI || "http://localhost:5173";
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin || origin === allowedOrigin) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      credentials: true,
+    })
+  );
 
-// CORS setup
-// app.use(cors({
-//   origin: process.env.FRONTEND_URI,
-//   credentials: true,
-// }));
-const allowedOrigin = process.env.FRONTEND_URI || "http://localhost:5173"; 
+  app.use(express.json());
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigin.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-}));
+  // Routes
+  app.use("/api/auth", authRoutes);
+  app.use("/api/chat", chatRoutes);
+  app.use("/api", userRoutes);
+  app.use("/api/users", userRoutes);
 
+  const server = http.createServer(app);
+  const io = new Server(server, {
+    cors: {
+      origin: allowedOrigin,
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+  });
 
-// Middleware
-app.use(express.json());
+  socketHandler(io);
 
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/chat", chatRoutes);
-app.use("/api", userRoutes);
+  // Kafka
+  await connectKafkaProducer();
+  await startConsumer(io).catch((err) =>
+    console.error("Kafka Consumer Failed to Start:", err)
+  );
 
-// HTTP + Socket Server
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URI,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
-socketHandler(io);
+  // Start Express server
+  const PORT = process.env.PORT || 5003;
+  server.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+};
 
-// Start Server
-const PORT = process.env.PORT || 5003;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+startServer();

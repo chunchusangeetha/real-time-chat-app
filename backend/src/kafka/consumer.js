@@ -1,5 +1,5 @@
-// src/kafka/consumer.js
 import { Kafka } from "kafkajs";
+import mongoose from "mongoose";
 import Message from "../models/message.js";
 
 const kafka = new Kafka({ clientId: "chat-app", brokers: ["localhost:9092"] });
@@ -11,12 +11,32 @@ export const startConsumer = async (io) => {
 
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      const parsedMessage = JSON.parse(message.value.toString());
+      try {
+        const parsedMessage = JSON.parse(message.value.toString());
 
-      const saved = await Message.create(parsedMessage);
+const { sender, receiver, content } = parsedMessage;
 
-      // Emit to receiver socket if they are online
-      io.to(parsedMessage.receiverId).emit("receive_message", saved);
+        if (
+          !mongoose.Types.ObjectId.isValid(senderId) ||
+          !mongoose.Types.ObjectId.isValid(receiverId)
+        ) {
+          console.error("Invalid ObjectId(s) received:", {
+            sender,
+            receiver,
+          });
+          return;
+        }
+
+        const saved = await Message.create({
+          sender: new mongoose.Types.ObjectId(sender),
+          receiver: new mongoose.Types.ObjectId(receiver),
+          content,
+        });
+
+        io.to(receiver).emit("receive_message", saved);
+      } catch (err) {
+        console.error("Kafka Consumer Error:", err);
+      }
     },
   });
 };

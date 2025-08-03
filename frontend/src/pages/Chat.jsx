@@ -1,132 +1,209 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { getCurrentUserMongoId } from "../services/user";
+import axios from "axios";
+import "../styles/Chat.css";
+import socket from "../services/socket";
+import { useRef } from "react";
+
+const backendURL = import.meta.env.VITE_API_BASE_URL;
 
 const Chat = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [users, setUsers] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
-
-  const backendURL = `${import.meta.env.VITE_API_BASE_URL}/api`; 
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await axios.get(`${backendURL}/users`);
-        console.log("Fetched users response:", res.data);
-        const users = res.data.users;
-        const filteredUsers = users.filter((u) => u.email !== user.email);
-        setUsers(filteredUsers);
-      } catch (err) {
-        console.error("Failed to load users", err);
-      }
-    };
-    fetchUsers();
-  }, [user]);
+  const [mongoUserId, setMongoUserId] = useState(null);
 
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!selectedUser) return;
+    if (user && mongoUserId) {
+      socket.emit("user_connected", { uid: user.uid, mongoId: mongoUserId });
+    }
+  }, [user, mongoUserId]);
+
+  useEffect(() => {
+    socket.on("update_online_users", (onlineIds) => {
+      setOnlineUsers(onlineIds);
+    });
+    return () => socket.off("update_online_users");
+  }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (loading || !user) return;
       try {
-        const res = await axios.get(
-          `${backendURL}/chat/${user.uid}/${selectedUser._id}`
-        );
-        setMessages(res.data.messages);
+        const token = await user.getIdToken();
+        const id = await getCurrentUserMongoId(user.uid);
+        setMongoUserId(id);
+
+        const res = await axios.get(`${backendURL}/api/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const filtered = res.data.filter((u) => u.uid !== user.uid);
+        setUsers(filtered);
       } catch (err) {
-        console.error("Failed to load messages", err);
+        console.error("Error fetching users:", err);
       }
     };
-    fetchMessages();
-  }, [selectedUser, user]);
+    fetchData();
+  }, [user, loading]);
 
-  const sendMessage = async () => {
-    if (!newMsg.trim() || !selectedUser) return;
+  
+  const selectedUserRef = useRef(null);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on("receive-message", (message) => {
+      if (
+        selectedUserRef.current &&
+        message.senderId === selectedUserRef.current._id
+      ) {
+        setMessages((prev) => [...prev, message]);
+
+        socket.emit("mark_as_received", {
+          messageId: message._id,
+          senderId: message.sender,
+          receiverId: message.receiver,
+        });
+      }
+    });
+
+    socket.on("message_status_update", ({ messageId }) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === messageId ? { ...msg, status: "delivered" } : msg
+        )
+      );
+    });
+
+    return () => {
+      socket.off("receive-message");
+      socket.off("message_status_update");
+    };
+  }, [selectedUser, mongoUserId, selectedUser?._id]);
+
+  const handleSend = () => {
+    if (!newMsg.trim() || !mongoUserId || !selectedUser) return;
+    const payload = {
+      senderId: mongoUserId,
+      receiverId: selectedUser._id,
+      content: newMsg,
+    };
+    socket.emit("send-message", payload);
+    const tempMessage = {
+      ...payload,
+      _id: Date.now(),
+      createdAt: new Date(),
+      status: "sent",
+    };
+    setMessages((prev) => [...prev, tempMessage]);
+    setNewMsg("");
+  };
+  const handleUserSelect = async (userObj) => {
+    if (!userObj?._id || !mongoUserId) {
+      console.warn("User or mongoUserId missing");
+      return;
+    }
+
+    setSelectedUser({ ...userObj }); 
+
     try {
-      await axios.post(`${backendURL}/chat/send`, {
-        senderId: user.uid,
-        receiverId: selectedUser._id,
-        content: newMsg,
-      });
-      setNewMsg("");
-      setMessages([...messages, { senderId: user.uid, content: newMsg }]);
+      const res = await axios.get(
+        `${backendURL}/api/chat/${mongoUserId}/${userObj._id}`
+      );
+      const msgs = Array.isArray(res.data.messages) ? res.data.messages : [];
+      setMessages(msgs);
+
+      msgs
+        .filter((m) => m.receiverId === mongoUserId && m.status !== "delivered")
+        .forEach((m) => {
+          socket.emit("mark_as_received", {
+            messageId: m._id,
+            senderId: m.senderId,
+            receiverId: m.receiverId,
+          });
+        });
     } catch (err) {
-      console.error("Failed to send message", err);
+      console.error("Failed to load messages", err);
+      setMessages([]); // fallback if error occurs
     }
   };
 
-  return (
-    <div style={{ display: "flex" }}>
-      {/* Left: User List */}
-      <div
-        style={{ width: "30%", borderRight: "1px solid gray", padding: "10px" }}
-      >
-        <h3>Users</h3>
-        {users.map((u) => (
-          <div
-            key={u._id}
-            style={{
-              padding: "8px",
-              cursor: "pointer",
-              backgroundColor: selectedUser?._id === u._id ? "#eee" : "#fff",
-            }}
-            onClick={() => setSelectedUser(u)}
-          >
-            {u.name}
-          </div>
-        ))}
-      </div>
+  if (loading || !mongoUserId) return <div>Loading chat...</div>;
 
-      <div style={{ width: "70%", padding: "10px" }}>
-        {selectedUser ? (
-          <>
-            <h3>Chat with {selectedUser.name}</h3>
-            <div
-              style={{
-                border: "1px solid #ccc",
-                height: "400px",
-                overflowY: "auto",
-                padding: "10px",
-              }}
-            >
-              {messages.map((msg, index) => (
-                <div
-                  key={index}
-                  style={{
-                    textAlign: msg.senderId === user.uid ? "right" : "left",
-                  }}
+  return (
+    <div className="chat-wrapper">
+      <div className="sidebar">
+        <h2>Users</h2>
+        <ul className="user-list">
+          {mongoUserId &&
+            users.map((u) => {
+              const isOnline = onlineUsers.includes(u._id);
+              return (
+                <li
+                  key={u._id}
+                  onClick={() => handleUserSelect(u)}
+                  className={`user-item ${
+                    selectedUser?._id === u._id ? "active" : ""
+                  }`}
                 >
                   <span
-                    style={{
-                      display: "inline-block",
-                      padding: "6px 12px",
-                      margin: "4px 0",
-                      backgroundColor:
-                        msg.senderId === user.uid ? "#daf0da" : "#f0f0f0",
-                      borderRadius: "10px",
-                    }}
-                  >
-                    {msg.content}
-                  </span>
+                    className={`status-dot ${isOnline ? "online" : "offline"}`}
+                  ></span>
+                  {u.name}
+                </li>
+              );
+            })}
+        </ul>
+      </div>
+
+      <div className="main-chat">
+        {selectedUser ? (
+          <>
+            <div className="chat-header">
+              <div className="user-name">{selectedUser.name}</div>
+              <div className="user-status">
+                {onlineUsers.includes(selectedUser._id) ? "Online" : "Offline"}
+              </div>
+            </div>{" "}
+            <div className="messages">
+              {messages.map((msg) => (
+                <div
+                  key={msg._id}
+                  className={`message-bubble ${
+                    msg.sender === mongoUserId ? "sent" : "received"
+                  }`}
+                >
+                  <span className="content">{msg.content}</span>
+                  {msg.sender === mongoUserId && (
+                    <span className="tick">
+                      {msg.status === "delivered" ? "✓✓" : "✓"}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: "10px", display: "flex" }}>
+            <div className="input-area">
               <input
                 type="text"
                 value={newMsg}
                 onChange={(e) => setNewMsg(e.target.value)}
-                placeholder="Type your message"
-                style={{ flex: 1, padding: "10px" }}
+                placeholder="Type a message"
               />
-              <button onClick={sendMessage} style={{ padding: "10px" }}>
-                Send
-              </button>
+              <button onClick={handleSend}>Send</button>
             </div>
           </>
         ) : (
-          <p>Select a user to start chatting</p>
+          <div className="no-user">Select a user to start chatting</div>
         )}
       </div>
     </div>

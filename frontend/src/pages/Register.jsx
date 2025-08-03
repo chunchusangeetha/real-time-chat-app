@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase/Firebase"; // Make sure this is correctly exported
+import { auth } from "../firebase/Firebase";
 import { useNavigate, Link } from "react-router-dom";
+import axios from "axios";
+import "../styles/Register.css";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -12,8 +14,25 @@ const Register = () => {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      navigate("/chat"); 
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+      const token = await user.getIdToken();
+
+      await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL}/api/auth/verify-token`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          withCredentials: true,
+        }
+      );
+      navigate("/chat");
     } catch (error) {
       if (error.code === "auth/email-already-in-use") {
         setErrorMsg("Email already in use. Do you want to log in instead?");
@@ -24,37 +43,47 @@ const Register = () => {
   };
 
   return (
-    <div style={{ padding: "1rem" }}>
-      <h2>Register</h2>
-      <form onSubmit={handleRegister}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        /><br />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        /><br />
-        <button type="submit">Register</button>
-      </form>
+    <div className="register-container">
+      <div className="register-box">
+        <h1 className="register-header">Welcome to Chat Application</h1>
+        <h2 className="register-subtitle">Sign Up</h2>
+        <form onSubmit={handleRegister} className="register-form">
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="register-input"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="register-input"
+          />
+          <button type="submit" className="register-button">
+            Register
+          </button>
+        </form>
 
-      {/* Error message and conditional login link */}
-      {errorMsg && (
-        <div style={{ color: "red", marginTop: "1rem" }}>
-          <p>{errorMsg}</p>
-          {errorMsg.includes("Email already in use") && (
-            <p>
-              <Link to="/login">Go to Login Page</Link>
-            </p>
-          )}
-        </div>
-      )}
+        {errorMsg && (
+          <div className="register-error">
+            <p>{errorMsg}</p>
+            {errorMsg.includes("Email already in use") && (
+              <p>
+                <Link to="/login">Go to Login Page</Link>
+              </p>
+            )}
+          </div>
+        )}
+
+        <p className="register-login-link">
+          Already have an account? <Link to="/login">Login here</Link>.
+        </p>
+      </div>
     </div>
   );
 };
