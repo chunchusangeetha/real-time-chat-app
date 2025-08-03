@@ -46,3 +46,27 @@ A secure, scalable real-time chat application built with **Socket.IO**, **Fireba
 cd backend
 npm install
 npm run dev
+
+### Frontend Setup (React + Vite)
+
+'''bash
+
+cd frontend
+npm install
+npm run dev
+
+### Run Frontend Tests
+bash
+
+
+cd frontend
+npm test
+
+## Generate Frontend Coverage
+bash
+
+cd frontend
+npm run test:coverage
+
+##Generates coverage files in:
+frontend/coverage/
